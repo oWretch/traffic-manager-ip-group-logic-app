@@ -1,0 +1,274 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "actions": {
+            "Download_Traffic_Manager_IPs": {
+                "inputs": {
+                    "headers": {},
+                    "method": "GET",
+                    "uri": "https://azuretrafficmanagerdata.blob.core.windows.net/probes/azure/probe-ip-ranges.json"
+                },
+                "runAfter": {},
+                "type": "Http"
+            },
+            "For_Each_IPv4_Prefix": {
+                "actions": {
+                    "Append_to_TrafficManagerV4IPs": {
+                        "inputs": {
+                            "name": "TrafficManagerV4IPs",
+                            "value": "@items('For_Each_IPv4_Prefix')?['ip_prefix']"
+                        },
+                        "runAfter": {},
+                        "type": "AppendToArrayVariable"
+                    }
+                },
+                "foreach": "@body('Parse_Traffic_Manager_IPs')?['ipv4_prefixes']",
+                "runAfter": {
+                    "Initialize_TrafficManagerV4IPs": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Foreach"
+            },
+            "Get_Current_IP_Group": {
+                "inputs": {
+                    "authentication": {
+                        "type": "ManagedServiceIdentity"
+                    },
+                    "method": "GET",
+                    "uri": "https://management.azure.com@{parameters('IpGroupResourceId')}?api-version=2021-02-01"
+                },
+                "runAfter": {},
+                "type": "Http"
+            },
+            "Get_IP_Group_Tags": {
+                "inputs": {
+                    "authentication": {
+                        "type": "ManagedServiceIdentity"
+                    },
+                    "method": "GET",
+                    "uri": "https://management.azure.com@{parameters('IpGroupResourceId')}/providers/Microsoft.Resources/tags/default?api-version=2021-04-01"
+                },
+                "runAfter": {
+                    "Parse_IP_Group_Response": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http"
+            },
+            "Initialize_TrafficManagerV4IPs": {
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "TrafficManagerV4IPs",
+                            "type": "array"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Parse_Traffic_Manager_IPs": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable"
+            },
+            "Parse_IP_Group_Response": {
+                "inputs": {
+                    "content": "@body('Get_Current_IP_Group')",
+                    "schema": {
+                        "properties": {
+                            "etag": {
+                                "type": "string"
+                            },
+                            "id": {
+                                "type": "string"
+                            },
+                            "location": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "properties": {
+                                "properties": {
+                                    "firewallPolicies": {
+                                        "type": "array"
+                                    },
+                                    "firewalls": {
+                                        "type": "array"
+                                    },
+                                    "ipAddresses": {
+                                        "items": {
+                                            "type": "string"
+                                        },
+                                        "type": "array"
+                                    },
+                                    "provisioningState": {
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            },
+                            "type": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "runAfter": {
+                    "Get_Current_IP_Group": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson"
+            },
+            "Parse_IP_Group_Tags": {
+                "inputs": {
+                    "content": "@body('Get_IP_Group_Tags')",
+                    "schema": {
+                        "properties": {
+                            "id": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "properties": {
+                                "properties": {
+                                    "tags": {
+                                        "type": "object"
+                                    }
+                                },
+                                "type": "object"
+                            },
+                            "type": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "runAfter": {
+                    "Get_IP_Group_Tags": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson"
+            },
+            "Parse_Traffic_Manager_IPs": {
+                "inputs": {
+                    "content": "@body('Download_Traffic_Manager_IPs')",
+                    "schema": {
+                        "properties": {
+                            "createDate": {
+                                "type": "string"
+                            },
+                            "ipv4_prefixes": {
+                                "items": {
+                                    "properties": {
+                                        "ip_prefix": {
+                                            "type": "string"
+                                        },
+                                        "service": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "ip_prefix",
+                                        "service"
+                                    ],
+                                    "type": "object"
+                                },
+                                "type": "array"
+                            },
+                            "ipv6_prefixes": {
+                                "items": {
+                                    "properties": {
+                                        "ip_prefix": {
+                                            "type": "string"
+                                        },
+                                        "service": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "ip_prefix",
+                                        "service"
+                                    ],
+                                    "type": "object"
+                                },
+                                "type": "array"
+                            }
+                        },
+                        "type": "object"
+                    }
+                },
+                "runAfter": {
+                    "Download_Traffic_Manager_IPs": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ParseJson"
+            },
+            "Update_IP_Group": {
+                "inputs": {
+                    "authentication": {
+                        "type": "ManagedServiceIdentity"
+                    },
+                    "body": {
+                        "location": "@body('Parse_IP_Group_Response')?['location']",
+                        "properties": {
+                            "firewallPolicies": "@body('Parse_IP_Group_Response')?['properties']?['firewallPolicies']",
+                            "firewalls": "@body('Parse_IP_Group_Response')?['properties']?['firewalls']",
+                            "ipAddresses": "@variables('TrafficManagerV4IPs')"
+                        },
+                        "tags": "@body('Parse_IP_Group_Tags')?['properties']?['tags']"
+                    },
+                    "method": "PUT",
+                    "uri": "https://management.azure.com@{parameters('IpGroupResourceId')}?api-version=2021-02-01"
+                },
+                "runAfter": {
+                    "For_Each_IPv4_Prefix": [
+                        "Succeeded"
+                    ],
+                    "Parse_IP_Group_Tags": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "Http"
+            }
+        },
+        "contentVersion": "1.0.0.0",
+        "parameters": {
+            "IpGroupResourceId": {
+                "type": "String"
+            }
+        },
+        "triggers": {
+            "At_2am_Every_Day": {
+                "evaluatedRecurrence": {
+                    "frequency": "Day",
+                    "interval": 1,
+                    "schedule": {
+                        "hours": [
+                            2
+                        ]
+                    },
+                    "timeZone": "UTC"
+                },
+                "recurrence": {
+                    "frequency": "Day",
+                    "interval": 1,
+                    "schedule": {
+                        "hours": [
+                            2
+                        ]
+                    },
+                    "timeZone": "UTC"
+                },
+                "type": "Recurrence"
+            }
+        }
+    },
+    "parameters": {}
+}
